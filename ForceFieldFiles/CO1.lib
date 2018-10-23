@@ -1,6 +1,6 @@
 !!index array str
- "CXY"
-!entry.CXY.unit.atoms table  str name  str type  int typex  int resx  int flags  int seq  int elmnt  dbl chg
+ "CO1"
+!entry.CO1.unit.atoms table  str name  str type  int typex  int resx  int flags  int seq  int elmnt  dbl chg
  "N" "N" 0 1 131072 7 7 -0.517800
  "H1" "H" 0 1 131072 8 1 0.266300
  "CA" "CT" 0 1 131072 9 6 0.258300
@@ -27,7 +27,7 @@
  "C8" "CT" 0 1 131072 30 6 -0.164500
  "H6" "H1" 0 1 131072 31 1 0.123600
  "H8" "H1" 0 1 131072 32 1 0.123600
-!entry.CXY.unit.atomspertinfo table  str pname  str ptype  int ptypex  int pelmnt  dbl pchg
+!entry.CO1.unit.atomspertinfo table  str pname  str ptype  int ptypex  int pelmnt  dbl pchg
  "N" "N" 0 -1 0.0
  "H1" "H" 0 -1 0.0
  "CA" "CT" 0 -1 0.0
@@ -54,18 +54,18 @@
  "C8" "CT" 0 -1 0.0
  "H6" "H1" 0 -1 0.0
  "H8" "H1" 0 -1 0.0
-!entry.CXY.unit.boundbox array dbl
+!entry.CO1.unit.boundbox array dbl
  -1.000000
  0.0
  0.0
  0.0
  0.0
-!entry.CXY.unit.childsequence single int
+!entry.CO1.unit.childsequence single int
  2
-!entry.CXY.unit.connect array int
+!entry.CO1.unit.connect array int
  1
  5
-!entry.CXY.unit.connectivity table  int atom1x  int atom2x  int flags
+!entry.CO1.unit.connectivity table  int atom1x  int atom2x  int flags
  1 2 1
  1 3 1
  3 4 1
@@ -92,7 +92,7 @@
  22 23 1
  24 25 1
  24 26 1
-!entry.CXY.unit.hierarchy table  str abovetype  int abovex  str belowtype  int belowx
+!entry.CO1.unit.hierarchy table  str abovetype  int abovex  str belowtype  int belowx
  "U" 0 "R" 1
  "R" 1 "A" 1
  "R" 1 "A" 2
@@ -120,9 +120,9 @@
  "R" 1 "A" 24
  "R" 1 "A" 25
  "R" 1 "A" 26
-!entry.CXY.unit.name single str
+!entry.CO1.unit.name single str
  "CXS"
-!entry.CXY.unit.positions table  dbl x  dbl y  dbl z
+!entry.CO1.unit.positions table  dbl x  dbl y  dbl z
  -1.673000 0.724000 -0.177000
  -0.893000 0.346000 0.310000
  -2.732000 -0.187000 -0.574000
@@ -149,19 +149,19 @@
  3.667000 0.996000 0.007000
  3.420000 1.274000 -1.010000
  3.672000 1.898000 0.608000
-!entry.CXY.unit.residueconnect table  int c1x  int c2x  int c3x  int c4x  int c5x  int c6x
+!entry.CO1.unit.residueconnect table  int c1x  int c2x  int c3x  int c4x  int c5x  int c6x
  0 0 0 0 0 0
-!entry.CXY.unit.residues table  str name  int seq  int childseq  int startatomx  str restype  int imagingx
+!entry.CO1.unit.residues table  str name  int seq  int childseq  int startatomx  str restype  int imagingx
  "CXS" 1 44 1 "?" 0
-!entry.CXY.unit.residuesPdbSequenceNumber array int
+!entry.CO1.unit.residuesPdbSequenceNumber array int
  0
-!entry.CXY.unit.solventcap array dbl
+!entry.CO1.unit.solventcap array dbl
  -1.000000
  0.0
  0.0
  0.0
  0.0
-!entry.CXY.unit.velocities table  dbl x  dbl y  dbl z
+!entry.CO1.unit.velocities table  dbl x  dbl y  dbl z
  0.0 0.0 0.0
  0.0 0.0 0.0
  0.0 0.0 0.0
