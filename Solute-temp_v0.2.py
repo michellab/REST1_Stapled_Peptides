@@ -505,7 +505,7 @@ if __name__ == "__main__":
     parser.add_argument('-helical' , action='store_true' , help='whether the peptide start in an helical conformation ' )
     parser.add_argument('-stapled' , action='store_true',  help='whether the peptide is stapled' )
     parser.add_argument('-FracTFE'  ,  default=False,  type=int, help='input sequence')
-    parser.add_argument('-FFdir' ,default='/home/marie/SP_git/ForceFieldFiles/' , action='store_true',  help='Additional forcefield files for custom residus and solvent  %(default)s' )
+    parser.add_argument('-FFdir' ,default=os.path.dirname(os.path.realpath(sys.argv[0]))+'ForceFieldFiles/' , action='store_true',  help='Additional forcefield files for custom residus and solvent  %(default)s' )
     ########################################################
     # PARSING INPUTS
     ########################################################
