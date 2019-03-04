@@ -36,8 +36,10 @@ def createSystem(molecules):
         resname =  molecule.residues()[0].name()
         if ( resname == ResName("WAT") ):
             solvent.add(molecule)
+            print('wat')
         else:
             solute.add(molecule)
+            print(resname)            
         #molecules.add(molecule)
 
     all = MoleculeGroup("all")
@@ -67,6 +69,11 @@ def setupForcefields(system, space):
     # - first solvent-solvent coulomb/LJ (CLJ) energy
     internonbondedffsolvent = InterCLJFF("solvent:solvent")
     internonbondedffsolvent.add(solvent)
+
+    # Now solvent intramolecular CLJ energy
+    intranonbondedffsolvent = IntraCLJFF("solvent-intranonbonded")
+    intranonbondedffsolvent.add(solvent)
+
     
     # Now solvent bond, angle, dihedral energy
     intrabondedffsolvent = InternalFF("solvent-intrabonded")
@@ -87,7 +94,7 @@ def setupForcefields(system, space):
     solutesolventinternonbondedff.add(solvent, MGIdx(1))
         
     # Here is the list of all forcefields
-    forcefields = [internonbondedffsolvent, intrabondedffsolvent, intrabondedffsolute, intranonbondedffsolute, solutesolventinternonbondedff]
+    forcefields = [internonbondedffsolvent, intrabondedffsolvent, intrabondedffsolute, intranonbondedffsolute, solutesolventinternonbondedff, intranonbondedffsolvent]
 
     print(forcefields)
     for forcefield in forcefields:
@@ -109,10 +116,13 @@ def setupForcefields(system, space):
     return system
 
 
-rst_file = sys.argv[1]
-top_file = sys.argv[2]
+rst_file = sys.argv[2]
+top_file = sys.argv[1]
+
 amber = Amber()
+print(rst_file ,top_file )
 molecules, space = amber.readCrdTop(rst_file, top_file)
+
 system = createSystem(molecules)
 system = setupForcefields(system, space)
 

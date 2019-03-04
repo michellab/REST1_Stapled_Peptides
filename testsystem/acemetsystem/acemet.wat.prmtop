@@ -275,4 +275,4 @@ H(N)-modified Bondi radii (mbondi2)
   8.50000000E-01  8.50000000E-01  8.00000000E-01
 %FLAG IPOL                                                                      
 %FORMAT(1I8)                                                                    
-       0
+0

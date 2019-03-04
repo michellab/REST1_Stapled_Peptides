@@ -5,34 +5,34 @@ d= \
 ===============================================================================
 Modification of Amber system topology and building peptide sequences with stapled residu to set up simulations for
 Solute Tempering Replica Exchange Simulations method.
-    
+
 Modifies LJ pair potentials and solvent partial charges between F, CF and OF atoms (TFE),  OW (water) and heavy atomtypes
 as well as  heavy atomtypes inside the protein
-    
-    
+
+
 TODO
-    
+
 -scalling ladder : for the moment, takes a list as input or linear make a linear scale
-    
+
 -dihedral scalling for the solvent
-    
+
 -see whether the B factor for the lennard Jones has to be removed for controlling aggregation
-    
+
 ------------------------
 Examples:
 ./Solute-temp_v$VERSION.py -seq AAAAA -helical -nreps 6 -smax 0.5 -v
 build a pentalaine peptide in an helical conformation and produce 6 replicas with
  REST1 scaling factor down to 0.5;
-    
+
 ./Solute-temp_v$VERSION.py -f <prmtop_file> -nreps 6 -smax 0.5 -hmr -v
 takes as input amber topology file <prmtop_file> to produce 6 replicas with
 REST1 scaling factor down to 0.5; and default HMassRepartition by parmed.tools.
-    
+
 The script relies on ParmEd and Numpy tools.
-    
+
 Marie Bluntzer
 s1772078@ed.ac.uk
-    
+
 version 0.2                                                   24/10/2019
 ================================================================================
 """
@@ -96,7 +96,7 @@ def make_3_letters_sequence(seq,stapled=False, one_letter=False , three_letters=
     aa=do_amino_acid_dict()
     xtra_libs=''
     indices_stapled_residues=[]
-    sequence = 'ACE'
+    sequence = ''
     if  one_letter==True and  three_letters==True:
         exit('Error : flag one_letter and three_letter cannot be used together!' )
 
@@ -120,9 +120,11 @@ def make_3_letters_sequence(seq,stapled=False, one_letter=False , three_letters=
         seq=''.join(seq.split(''))
 
     if len(seq.split()) ==1 and three_letters==False :
+
         for a in seq:
             if   aa.get(a, False) ==False : exit( 'Error: one_letter code for %s  was not recognised ' %a )
             else : sequence=' '.join([sequence , aa[a]['code'] ])
+    sequence=' '.join([args.Nter ,  sequence,args.Cter])
 # Now that the sequen ce has ben formated to tleap time to check ! :
     for position in range(1,len(sequence.split())) :  #spare the 'ACE'
             AAA = sequence.split()[position]
@@ -150,8 +152,9 @@ def setupsimulation(seq, stapled=False, FractTFE=False , FFdir=False, one_letter
 
 #shutil.copyfile(args.pdbfile,'inputs/peptide.pdb' )
 
- #sequence , xtra_libs, indices_stapled_residues = make_3_letters_sequence(seq, stapled , one_letter , three_letters)
- sequence='ACE NME'
+ sequence , xtra_libs, indices_stapled_residues = make_3_letters_sequence(seq, stapled , one_letter , three_letters)
+
+
  xtra_libs=''
  indices_stapled_residues=''
  bond=''
@@ -180,12 +183,30 @@ def setupsimulation(seq, stapled=False, FractTFE=False , FFdir=False, one_letter
                   'savepdb m peptide.pdb \n',\
                   '%s '%(solvent)  , \
                   ### addions set to 0  --->  ions will be added to neutralise the system
-                  'addIons m Na+ 0 Cl- 0  \n' ,\
+                  'addIons m Na+ 0 \n' ,\
+                  'addIons m Cl- 0  \n' ,\
                   'saveamberparm m system.wat.leap.prmtop system.wat.leap.rst7 \n' , \
                   'quit' ] )
  tleap.close()
  subprocess.call('tleap -f tleap.in' , shell=True)!=0
 
+
+#----------------------------------------------
+def get_protein_atomtypes(input_parm):
+    """
+    Read all residues and atoms and return a list of sidechain (+ C_alpha)
+    C and S atomtypes to be used in STREMD scaling.
+    """
+
+    solventype= ['OW','HW', 'CS', 'F', 'OF']
+    # protein atomtypes
+    proteic_atomtypes = []
+    for resid in input_parm.residues:
+        for atom in resid.atoms:
+            if atom.atomic_number in [ 6, 7, 8, 16]: # C, N , O and S
+                if atom.type.isupper() and atom.type not in proteic_atomtypes and atom.type not in solventype:
+                    proteic_atomtypes.append(atom.type)
+    return proteic_atomtypes
 
 #----------------------------------------------
 def do_HMR(input_parm, HM_Da):
@@ -291,6 +312,39 @@ def scale_solvent_LJ(input_parm,  sfactor, verbose=False):
             gromacs_nonbond += "%-10s   %-10s  1   %8.6e   %8.6e\n" % (atype, atype, sigma, epsilon)
 '''
 
+def scale_protein_LJ(input_parm,  sfactor, verbose=False):
+    """
+    Multiplies water and TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST1 scheme.
+    Returns an updated parmed parameter object.
+    """
+
+
+    # add COMMENTS
+    input_parm.parm_comments['USER_COMMENTS'] += ['REST1 METHOD (scaling factor = %.3f)' % sfactor,\
+                                                  'scaled OW , CS, F, OF LJ epsilon' ]
+    # FOR GROMACS
+    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+
+    #Define solvent atomype : Water,  Water/TFE , TFE . Maybe have to come with something more elegant ?
+
+
+    for atype in get_protein_atomtypes(input_parm):
+        try :
+            rh_s = input_parm.LJ_radius[input_parm.LJ_types[atype]-1] # Rmin/2
+            eps_s = input_parm.LJ_depth[input_parm.LJ_types[atype]-1]
+        except : continue
+        eps_s *= sfactor   #apply the factor
+        act_changeLJ = parmed.tools.actions.changeLJSingleType(input_parm, "@%" + atype.replace("*", "\\\*"), rh_s, eps_s)
+        act_changeLJ.execute()
+
+    return input_parm
+'''
+            # add equivalent line in GROMACS topology
+            sigma = Rmin_iS * 2**(1.0/6) / 10 # convert to A
+            epsilon = eps_iS* 4.184     #convert to kJ/mol
+            gromacs_nonbond += "%-10s   %-10s  1   %8.6e   %8.6e\n" % (atype, atype, sigma, epsilon)
+'''
+
 
 
 #-------------------------------------------------------------------------------------------
@@ -343,6 +397,76 @@ def scale_solvent_charges(input_parm,  sfactor, verbose=False):
     return input_parm
 
 #-------------------------------------------------------------------------------------------
+
+
+def scale_protein_charges(input_parm,  sfactor, verbose=False):
+    """
+    Multiplies every not water or TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST2 scheme.
+    Returns an updated parmed parameter object.
+    """
+
+
+    # add COMMENTS
+    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % math.sqrt(sfactor),\
+                                                  'scaled OW , CS, F, OF partial charges ' ]
+    # FOR GROMACS
+    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+
+
+    protype= get_protein_atomtypes(input_parm)
+
+
+    protcharge=np.zeros(len(protype))
+    for resid in input_parm.residues:
+            if  0 not  in protcharge  : break
+            for atom in resid.atoms:
+
+                if atom.type.isupper() and atom.type in protype:
+
+                    protcharge [protype.index(atom.type)] =atom.charge
+    if verbose: print (protcharge)
+    protcharge *= math.sqrt(sfactor)   #apply the factor
+    if verbose: print ( protcharge)
+    for i in protype :
+        try :
+            act_changecharge=parmed.tools.actions.change(input_parm, input_parm.charge_flag , "@%" + i,protcharge[protype.index(i)] )
+            act_changecharge.execute()
+        except : continue
+
+    protcharge=np.zeros(len(protype))
+    #while 0 in protcharge:
+    for resid in input_parm.residues:
+            for atom in resid.atoms:
+                if atom.type.isupper() and atom.type  in protype:
+                    protcharge [protype.index(atom.type)] =atom.charge
+
+    return input_parm
+
+#-------------------------------------------------------------------------------------------
+
+def scale_protein_dihedral(input_parm,  sfactor, verbose=False):
+    """
+    Multiplies every not water or TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST2 scheme.
+    Returns an updated parmed parameter object.
+    """
+
+    protype= get_protein_atomtypes(input_parm)
+    # add COMMENTS
+    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % math.sqrt(sfactor),\
+                                                  'scaled OW , CS, F, OFdihedrals ' ]
+    # FOR GROMACS
+    gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
+
+    protcharge=np.zeros(len(protype))
+    SOL_RES=[]
+    for dih in input_parm.dihedral_types:
+            dih.phi_k = dih.phi_k *sfactor
+
+    return input_parm
+
+#-------------------------------------------------------------------------------------------
+
+
 
 def scale_solvent_solvent_LJPairs(input_parm, atomtypes_changed, sfactor, verbose=False):
     """
@@ -494,10 +618,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=d, epilog=" ")
     parser.add_argument("-f", type=str, default='system.wat.leap.prmtop', help='input AMBER topology file name (default: %(default)s)')
     parser.add_argument("-o", type=str, default=None, help='output AMBER topology file name (default: system[HMR]_REST1.XXX.prmtop)')
-    parser.add_argument("-nreps", type=int, default=5, help='number of replicas (default: %(default)s)')
-    parser.add_argument("-smax", type=float, default=1.1, help="maximum scaling factor (default: %(default)s)")
+    parser.add_argument("-nreps", type=int, default=8, help='number of replicas (default: %(default)s)')
+    parser.add_argument("-smax", type=float, default=1.8, help="maximum scaling factor (default: %(default)s)")
     parser.add_argument("-smin", type=float, default=1.0, help="minimum scaling factor (default: %(default)s)")
     parser.add_argument("-scale", type=float, nargs='+', default=[], help="list of scaling factor(s); overrides -nreps, -smax, -smin (default: %(default)s)")
+    parser.add_argument("-sf", type=str,  default='lin', help="function for scaling : lin/exp (linear/exponetial) (default: %(default)s)")
     parser.add_argument("-ignore", default=False, action='store_true', help="ignore warnings (default: %(default)s)")
     parser.add_argument("-hmr", default=False, action='store_true', help="HMassRepartition (default: %(default)s)")
     parser.add_argument("-hm_Da", type=float, default=None, help="H mass in Daltons used in HMR (default: use parmed default, 3.024)")
@@ -505,6 +630,9 @@ if __name__ == "__main__":
     parser.add_argument("-xyz", type=str, default='system.wat.leap.rst7', help='input AMBER coordinate file name (default: %(default)s)')
     parser.add_argument("-gmx", default=False, action='store_true', help="save GROMACS topology, too (not functional !!!) (default: %(default)s)")
     parser.add_argument('-seq'  ,  type=str , help='input sequence')
+    parser.add_argument('-Nter'  ,  type=str ,default='ACE',  help='Nterminal  (default: %(default)s) for none enter  \'\' ')
+    parser.add_argument('-Cter'  ,  type=str  ,default='NHE' , help='Nterminal  (default: %(default)s) (amine) for carboxylic enter \'\' ' )
+
     parser.add_argument('-helical' , action='store_true' , help='whether the peptide start in an helical conformation ' )
     parser.add_argument('-stapled' , action='store_true',  help='whether the peptide is stapled' )
     parser.add_argument('-FracTFE'  ,  default=False,  type=int, help='input sequence')
@@ -532,8 +660,8 @@ if __name__ == "__main__":
     FFdir=args.FFdir
     stapled=args.stapled
     helical=args.helical
+    scale_func=args.sf
 
-    print(FFdir )
     if sequence :
         setupsimulation(sequence,FractTFE=FractTFE,  FFdir=FFdir)
 
@@ -551,15 +679,25 @@ if __name__ == "__main__":
     print("%s\n SOLUTE TEMPERING SETUP\n%s\n\n" % ("#"*42, "#"*42) +\
           "Input files read!\nStarting the script. This should take about a minute or two...\n")
 
-    if scale == []:
+    if scale == [] and scale_func =='exp'  :
+        if ( smax <2 and smax > 0) and ( smin <2 and smin > 0):
+
+            sfactors = np.linspace(smin, smax, nreps)
+
+            for i in range(len(sfactors)):
+                sfactors[i] = (1/(math.exp(1)-math.exp(2)))*(math.exp(sfactors[i])-math.exp(2))
+
+        else :
+            sys.exit('smax and smin sould be between 1 and 2')
+    elif scale == [] and scale_func =='lin'  :
+        smax= 1/smax
         sfactors = np.linspace(smin, smax, nreps)
     else:
         sfactors = scale
         nreps = len(scale)
-
+    print(sfactors)
     if 1.0 not in sfactors:
         print("WARNING: scaling factors does not include 1.0 - are you sure, it's OK?")
-        print(sfactors)
         if not ignore:
             print("If above list looks OK, and you know what you are doing: restart with a flag '-ignore' to proceed.")
             exit(2)
@@ -607,14 +745,16 @@ if __name__ == "__main__":
         #new_parm, REST1_gmx_nonbond = scale_solvent_protein_LJPairs(input_parm_copy, atomtypes_REST1, np.sqrt(sfactor), verbose=True)
         #new_parm, REST1_gmx_nonbond = scale_protein_protein_LJPairs(input_parm_copy, atomtypes_REST1, sfactor, verbose=True)
         if verbose: print('scaling LJ interactions')
-        new_parm_LJ = scale_solvent_LJ(input_parm_copy, sfactor, verbose=True)
+        #scale_solvent_LJ
+        new_parm_LJ = scale_protein_LJ(input_parm_copy, sfactor, verbose=True)
         if verbose: print('scaling charges interactions')
-        new_parm = scale_solvent_charges(new_parm_LJ, sfactor, verbose=True)
+        #scale_solvent_charges
+        new_parm = scale_protein_charges(new_parm_LJ, sfactor, verbose=True)
         # check if off-diagonal terms have been changed
         if verbose: print("Off-diagonal terms changed: %s\n" % str(new_parm.has_NBFIX()))
-
+        new_parm = scale_protein_dihedral(new_parm_LJ, sfactor, verbose=True)
         # SAVE AMBER .PRMTOP
-        new_parm.save(dirpath+'%s+REST1.%03d.prmtop' % (outputname, rep), format="amber", overwrite=True)
+        new_parm.save(dirpath+'%s+REST2.%03d.prmtop' % (outputname, rep), format="amber", overwrite=True)
         print_saved = '### New topology saved as %s+REST1.%03d.prmtop\n' % (outputname, rep)
         log.write(print_saved)
         if verbose: print(print_saved)
