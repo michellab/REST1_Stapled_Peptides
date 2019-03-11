@@ -16,8 +16,10 @@ import argparse
 from MDAnalysis.analysis import rms
 import MDAnalysis.coordinates.TRJ
 import numpy as np
-import matplotlib as ax
+from  matplotlib import cm
+
 from sklearn.cluster import KMeans
+from matplotlib import dates
 #from msmbuilder.cluster import KMeans
 import numpy as np
 import pandas as pd
@@ -26,33 +28,97 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import seaborn as sns
 import matplotlib.pyplot as plt
+import math
+from sklearn.neighbors.kde import KernelDensity
+import random
+
+def kde2D(x, y, bandwidth, xbins=100j, ybins=100j):
+    """Build 2D kernel density estimate (KDE)."""
+
+    # create grid of sample locations (default: 100x100)
+    xx, yy = np.mgrid[-math.pi:math.pi:bandwidth/xbins, -math.pi:math.pi:bandwidth/ybins]
+
+    xy_sample = np.vstack([yy.ravel(), xx.ravel()]).T
+    xy_train  = np.vstack([y, x]).T
+
+    kde_skl = KernelDensity(bandwidth=bandwidth)
+    kde_skl.fit(xy_train)
+
+    # score_samples() returns the log-likelihood of the samples
+    z = np.exp(kde_skl.score_samples(xy_sample))
+    return xx, yy, np.reshape(z, xx.shape)
+
+
+def Convergence(topolPrefix,  reftopol =False ,reftraj =False ):
+     # make a plot computing the distance of the surface of 2 ramachadan plots
+     # if ref is given compare it to this simulation , otherwise  compare to the whole simulation
+    traj = md.load( '0.demux.nc' ,  top=topolPrefix )
+    bandwidth=0.5
+
+    if reftopol != 0 :
+        ref = md.load(  reftraj ,  top=reftopol)
+        phiref = np.concatenate(md.compute_phi(ref)[1][0:])
+        psiref = np.concatenate(md.compute_psi(ref)[1][0:])
+        xx, yy , zzref =  kde2D(phiref, psiref, bandwidth, xbins=100j, ybins=100j)
+
+    else :
+        phi = np.concatenate( md.compute_phi(traj)[1][0:])
+        psi = np.concatenate(md.compute_psi(traj)[1][0:])
+        print(len(psi))
+        xx, yy , zzref =  kde2D(phi, psi, bandwidth, xbins=100j, ybins=100j)
+    stride =100
+    z = np.array(t.n_frames)
+    t = np.array(t.n_frames)
+    for i in range(100,t.n_frames,stride):
+        phi = np.concatenate( md.compute_phi(traj)[1][0:i])
+        psi = np.concatenate(md.compute_psi(traj)[1][0:i])
+        xx, yy , zz =  kde2D(phi, psi, bandwidth, xbins=100j, ybins=100j)
+        t[i]= i
+        z[i]= np.sum( np.power( zz- zzref,2))  # to the power to get a sum of positives would work with #np.sum( np.absolute( zz- zzref))
+
+    plt.plot(t,z , linewidth=2, markersize=12)
+
+
+
+
 
 def runRama(topolPrefix, trajPrefix , nreps) :
-    for laps in range(1000 , 55000 , 100):
+    locator = dates.HourLocator(interval=1)
+    locator.MAXTICKS = 1000
+    #sns.set()
+    mcmap =  cm.get_cmap('gist_ncar_r')
+    # https://matplotlib.org/tutorials/colors/colormaps.html  https://python-graph-gallery.com/100-calling-a-color-with-seaborn/
+    #gist_heat_r   gist_earth_r   gist_stern    inferno_r')   # gnuplot2')# afmhot_r') #nipy_spectral_r')CMRmap_r  magma_r inferno_r
+    mcmap.set_under('w')
+    sns.set( style='white' ,font_scale=0.4 , rc={'figure.facecolor':'gray'})  #'darkgrey'
+    trajs = []
+    for replica in range(nreps):
+        trajs.append(md.load( str(replica ) + '.demux.nc' , stride = 1 ,  top=topolPrefix ))
+    for laps in range(8000, 50000 , 200):
         #os.system( 'rm phipsiall-%s.dat'  %(  str(laps)))
 
-        fig, axes = plt.subplots(ncols=6, nrows=nreps)
-
+        fig, axes = plt.subplots(ncols=6, nrows=nreps, figsize=(20,10))
+        #axes.xaxis.set_minor_locator(locator)
 
         for replica in range(nreps):
-            traj = md.load( str(replica ) + '.demux.nc' , top=topolPrefix )
-            stride =laps// 1000
+            traj = trajs[replica]
+            stride =  1  #laps// 100
             t = traj[0:laps:stride]
                             #CA = t.topology.select('name CA')
             C = [atom.index for atom in t.topology.atoms if atom.name == 'C']
             N = [atom.index for atom in t.topology.atoms if atom.name == 'N']
             CA = [atom.index for atom in t.topology.atoms if atom.name == 'CA']
-            print(N, C , CA)
+            #print(N, C , CA)
 
             #residues = range(2,7)
             residues= range(1,6)
-            print(residues)
+            #print(residues)
             phiall =[]
             psiall =[]
             if phiall : del phiall
-            phiall =[]
+            phiall = np.array([])
             if psiall : del psiall
-            psiall =[]
+            psiall = np.array([])
             for residue in residues:
                 print( 'residue : %s \n replica : %s' %(residue, replica))
                 ''' Using CPPtraj --> noo output is writen :-(
@@ -82,7 +148,7 @@ str(residue + 1 )  ,str(residue + 1 )  , str(residue + 1 ) , str(residue)  ,str(
 
                 indicesphi = np.array( [[C[residue-1], N[residue-1],CA[residue-1], C[residue]]])
                 indicespsi = np.array( [[ N[residue-1],CA[residue-1], C[residue],  N[residue]] ])
-                print(indicesphi )
+
                 phi= md.compute_dihedrals(t, indicesphi , periodic=True, opt=True  )
                 psi= md.compute_dihedrals(t,indicespsi, periodic=True, opt=True )
 
@@ -90,45 +156,129 @@ str(residue + 1 )  ,str(residue + 1 )  , str(residue + 1 ) , str(residue)  ,str(
                 df = pd.DataFrame( { 'phi' : phi.T[0] , 'psi' :psi.T[0] } )
                 #print(df.phi, df.psi)
                 #sns.kdeplot(df.phi, df.psi, cmap='nipy_spectral_r',  n_levels=1000 , shade=True , ax=axes[replica, residue-2 ]) # norm=LogNorm())
-                axes[replica][residue-1 ].set(xlim=(-180, 180), ylim=(-180, 180) )
-                sns.kdeplot(df.phi, df.psi, cmap='nipy_spectral_r',  n_levels=1000 , shade=True , ax=axes[replica][residue-1 ])
+
+                axes[replica][residue-1 ].set(xlim=(-math.pi, math.pi), ylim=(-math.pi,math.pi  ) )
+                #ax.xaxis.set_minor_locator(locator)
+
+
+                #sns.kdeplot(df.phi, df.psi, cmap=mcmap,  n_levels=1000 , shade=True , ax=axes[replica][residue-1 ])
+
+                try : sns.kdeplot(df.phi, df.psi,n_levels=1000 ,cmap=mcmap,  shade=True , ax=axes[replica][residue-1 ])
+                except (RuntimeError, TypeError, Exception) :  sns.kdeplot(df.phi, df.psi,n_levels=10 ,cmap=mcmap,  shade=True , ax=axes[replica][residue-1 ])
+
                 #plt.show()
             	#'Spectral_r'
-                phiall.append(phi.T[0])
-                psiall.append(phi.T[0])
+                phiall=np.concatenate((phiall , phi.T[0]))
+                psiall=np.concatenate((psiall , psi.T[0]))
+                #phiall.append(phi.T[0][:])
+                #psiall.append(phi.T[0][:])
+                #print(psiall)
             #Overall phi/psi values
             #phi =  md.compute_phi(t , periodic=True, opt=True  )
             #phi =  md.compute_psi(t , periodic=True, opt=True  )
-            print(phi)
 
-            df = pd.DataFrame( { 'phi' : phiall[0], 'psi' :psiall[0]  } )
-            axes[replica][-1 ].set(xlim=(-180, 180), ylim=(-180, 180) )
-            sns.kdeplot(df.phi, df.psi, cmap='nipy_spectral_r',  n_levels=1000 , shade=True , ax=axes[replica][-1 ])
-        plt.savefig(filename+'rama.jpg')
+            #phiall = np.array(phiall )
+            #psiall= np.array(psiall )
+            df = pd.DataFrame( { 'phi' : phiall, 'psi' :psiall  } )
+            axes[replica][-1 ].set(xlim=(-math.pi, math.pi), ylim=(-math.pi, math.pi) )
+            #print(axes[replica][-1 ])
+            sns.kdeplot(df.phi, df.psi, cmap=mcmap,  n_levels=1000 , shade=True , ax=axes[replica][-1 ])
+        plt.title(laps)
+        #plt.colorbar(fig)
+        plt.savefig(str(laps)+'-rama.jpg')
+
+
 
 
 
 def runCluster(topolPrefix , trajPrefix, nreps):
-    for i in range(nreps) :
+    #for i in range(nreps) :
         #universe = MDAnalysis.Universe(topolPrefix , str(i) + '.demux.nc' )
         #cluster_collection = encore.cluster(universe , method= KMeans(100,n_jobs=5 ))
-        '''
+
         dataset = []
 
-        t = md.load( str(i) + '.demux.nc' , top=topolPrefix )
-        dataset.append(md.compute_phi(t[::100]))
-        dataset.append(md.compute_psi(t[::100]))
-        dataset.append(md.compute_chi1(t[::100]))
+        t = md.load( str(0) + '.demux.nc' , top='system.wat.leap.strip.prmtop' )
+        phi = md.compute_phi(t[::1])
+        psi = md.compute_psi(t[::1])
+        #chi1 = md.compute_chi1(t[::100])
+        metric = np.concatenate(( phi[1] , psi[1])  , axis = 1 )
 
-        kmeans = KMeans(n_clusters=10, random_state=0)
-        '''
+        #for i in range(len(metric)): metric[i] = np.reshape(metric[i] , (5, 2), order='F')
+
+        #metric2 = np.ndarray( (np.shape(phi[1])[0],  np.shape(phi[1])[1], 2) )
+        cutoff = 5
+
+        nb_cluster=0
+        while  metric.shape[0] !=0 :
+
+            nb_cluster+=0
+            #medoid = find_medoid(metric)
+            print(len(metric))
+            medoid = metric[random.randint(0,len(metric)-1)]
+            #take rqandom frame
+            #rand_frame=
+            #medoid =
+
+
+            #for structure in metric.shape[0] :
+            diff = metric - medoid
+            #dist = np.sum(metric[])
+        #for i in range(len(metric2)): metric2[i] = np.reshape(metric[i] , (5, 2), order='F')
+            dist = np.sqrt(np.sum(np.power(diff,2) , axis= 1 ))
+            list= np.array([])
+            for i in range (len(dist)):
+                #print(dist[i])
+                if dist[i] < cutoff:
+                    #metric = np.delete(metric, i, 0)
+                    list = np.append(list , [i] )
+
+            if nb_cluster == 0 :
+                #clusters = np.array(list , dtype=object)
+                clusters = []
+                clusters.append(list)
+                nb_cluster += 1
+            else :
+                #clusters = np.append( clusters , list , axis = 1 )
+                clusters.append(list)
+
+                nb_cluster += 1
+            for j in list[::-1]  :
+
+                metric = np.delete(metric, j, 0)
+
+        return  nb_cluster,  clusters
+
+
+def find_medoid(metric) :
+    #for the moment that is not a metroid but a sort of centroid
+    avgs =[]
+    length = metric.shape[0]
+    #for i in range(10):
+            #avgs.append( np.sum( metric2[:, i])/length)
+    avgs=np.median(metric, axis=0)
+    return avgs
+
+
+
+
+
+    '''
+        for frame in range(len(metric)):
+            for res in range(len(metric[frame]):
+                 metric[frame][res] = [ phi[1][frame][res] ,  psi[1][frame][res] ]
+
+    '''
+
+        #kmeans = KMeans(n_clusters=10, random_state=0)
+
 
         #kmeans.cluster_centers_
 
         #cluster = KMeans(n_clusters=10)
         #cluster.fit(dataset)
 
-        print( kmeans)
+        #print( kmeans)
 
 def runCluster2(topolPrefix , trajPrefix, nreps, ncluster):
     for i in range(nreps) :
@@ -136,7 +286,7 @@ def runCluster2(topolPrefix , trajPrefix, nreps, ncluster):
         #cluster_collection = encore.cluster(universe , method= KMeans(100,n_jobs=5 ))
         dataset = []
 
-        t = md.load( str(i) + '.demux.nc' , top='system.wat.leap.strip.prmtop')
+        t = md.load( str(i) + '.demux.nc' , top=topolPrefix )
         # pick  nclusters random structures
         centroids=np.zeros( ncluster)
         clusterframes=[]
@@ -155,7 +305,7 @@ def runCluster2(topolPrefix , trajPrefix, nreps, ncluster):
             j = range(t.n_frames)
 
             for i in range(ncluster) :
-                if clusterframes[i] : del clusterframes[i]
+                del clusterframes[i]
 
             while j != 0:
                 for i in range(ncluster) :
@@ -238,13 +388,13 @@ def diffusionAnalysis(nreps):
 
 def demuxTraj(trajPrefix, topolPrefix , nreps):
  cpptrajInputFile=open('cpptrajDemux.in' ,'w')
- cpptrajInput='ensemble %s_0.nc trajnames' %trajPrefix
+ cpptrajInput='parm %s \nensemble %s_0.nc trajnames ' %(topolPrefix , trajPrefix)
  for i in range(1 ,nreps)  :
-  cpptrajInput+=' %s_%s.nc' %(trajPrefix ,i)
- cpptrajInput+= 'nosort remlog rem.log \ntrajout  demux.nc \nrun '
+  cpptrajInput+='%s_%s.nc,' %(trajPrefix ,i)
+ cpptrajInput = cpptrajInput[:-1] +' nosort remlog rem.log \nautoimage\nstrip :WAT \ntrajout  demux.nc \nrun\nparm %s name top \nparmstrip :WAT parm top \nparmwrite parm top out system.wat.leap.strip.prmtop\nrun'%topolPrefix
  cpptrajInputFile.writelines(cpptrajInput)
  cpptrajInputFile.close()
- os.system('cpptraj -p %s -i cpptrajDemux.in' %topolPrefix)
+ os.system('cpptraj -i cpptrajDemux.in' )
  for i in range(nreps)  :
   os.rename('demux.nc.' +str(i) , str(i)+'.demux.nc')
 
@@ -293,7 +443,7 @@ def main() :
  parser.add_argument('--cluster',  action='store_true',  default=False ,help='cluster trajectory')
  parser.add_argument('--rama', action='store_true', help='ramchadan')
  parser.add_argument('--exch', action='store_true', help='provide a small analysis of the exchanges')
-
+ parser.add_argument('--conv', action='store_true', help='provide a small analysis of the exchanges')
  parser.add_argument('--toref',action='store_true', default=False ,help='compare ramachadan to a converged simulation')
 
  args = parser.parse_args()
@@ -306,12 +456,17 @@ def main() :
  RMSF = args.rmsf
  toref = args.toref
  exch = args.exch
+ conv = args.conv
+ print(conv)
  rama = args.rama
  cluster= args.cluster
  ncluster = 10
 
  if os.path.isfile('./0.demux.nc') == False or args.rewrite==True :
     demuxTraj(trajPrefix,topolPrefix, nreps)
+ topolPrefix = 'system.wat.leap.strip.prmtop'
+
+
 
  if  exch ==True : diffusionAnalysis(nreps )
 
@@ -321,10 +476,11 @@ def main() :
     runRama( topolPrefix, trajPrefix , nreps)
 
  if  cluster == True:
-    runCluster2(  topolPrefix, trajPrefix , nreps , ncluster)
+    c, n = runCluster(  topolPrefix, trajPrefix , nreps )
+    print( n , 'There was ' + str(c) +'clusters')
 
-
-
+ if args.conv == True:
+    Convergence(topolPrefix)
 if __name__ == '__main__' :
 
     main()
