@@ -1,3 +1,5 @@
+
+
 #! $env python
 
 d= \
@@ -22,11 +24,11 @@ TODO
 Examples:
 ./Solute-temp_v$VERSION.py -seq AAAAA -helical -nreps 6 -smax 0.5 -v
 build a pentalaine peptide in an helical conformation and produce 6 replicas with
- REST1 scaling factor down to 0.5;
+ REST2 scaling factor down to 0.5;
 
 ./Solute-temp_v$VERSION.py -f <prmtop_file> -nreps 6 -smax 0.5 -hmr -v
 takes as input amber topology file <prmtop_file> to produce 6 replicas with
-REST1 scaling factor down to 0.5; and default HMassRepartition by parmed.tools.
+REST2 scaling factor down to 0.5; and default HMassRepartition by parmed.tools.
 
 The script relies on ParmEd and Numpy tools.
 
@@ -71,6 +73,8 @@ def do_amino_acid_dict():
     'Y':{'code':'TYR','nat':True, 'desc': 'Tyrosine'},\
     'a':{'code':'AKS','nat':False, 'desc': '(S)-2-(4-pentenyl)glycine' } ,\
     'b':{'code':'AKR','nat':False, 'desc': '(R)-2-(4-pentenyl)glycine'}, \
+    'm':{'code':'A5S','nat':False, 'desc': '(S)-2-(4-pentenyl)alanine' } ,\
+    'n':{'code':'A5R','nat':False, 'desc': '(R)-2-(4-pentenyl)alanine' } ,\
     'c':{'code':'LNS','nat':False, 'desc': '(S)-Lysine-N3' }  ,\
     'd':{'code':'LNR','nat':False, 'desc': '(R)-Lysine-N3'}, \
     'e':{'code':'PGS','nat':False, 'desc': '(S)-Propargyglycine'},\
@@ -94,9 +98,10 @@ def make_3_letters_sequence(seq,stapled=False, one_letter=False , three_letters=
 
     '''
     aa=do_amino_acid_dict()
-    xtra_libs=''
+
     indices_stapled_residues=[]
     sequence = ''
+    xtralib=''
     if  one_letter==True and  three_letters==True:
         exit('Error : flag one_letter and three_letter cannot be used together!' )
 
@@ -128,10 +133,13 @@ def make_3_letters_sequence(seq,stapled=False, one_letter=False , three_letters=
 # Now that the sequen ce has ben formated to tleap time to check ! :
     for position in range(1,len(sequence.split())) :  #spare the 'ACE'
             AAA = sequence.split()[position]
+
             if False in [value['nat'] for key, value in aa.items() if value['code'] == AAA ] :
                 if stapled :
-                    indices_stapled_residues += position
-                    xtra_libs+= 'loadoff  %s/%s_stapled.lib \n loadamberparams  %s/%s_stapled.frcmod  \n'  %(FFdir, AAA , FFdir , AAA ) #Might load twice the same
+                    indices_stapled_residues.append( position-1)
+                    print(AAA)
+                    print(position)
+                    xtralib+= 'loadoff  %s/%s_stapled.lib \n loadamberparams  %s/%s_stapled.frcmod  \n'  %(FFdir, AAA , FFdir , AAA ) #Might load twice the same
                 else : xtralib+= 'loadoff  %s/%s_open.lib \n loadamberparams  %s/%s_open.frcmod  \n'  %(FFdir, AAA , FFdir , AAA )
 
 
@@ -142,7 +150,7 @@ def make_3_letters_sequence(seq,stapled=False, one_letter=False , three_letters=
 
     if verbose: print(' input file will be generated for this sequence %s ' %(sequence ))
     #logfile.write(' input file have  been generated for this sequence %s '  %(sequence ) )
-    return sequence , xtra_libs, indices_stapled_residues
+    return sequence , xtralib, indices_stapled_residues
 
 
 def setupsimulation(seq, stapled=False, FractTFE=False , FFdir=False, one_letter=False , three_letters=False ) :
@@ -153,18 +161,18 @@ def setupsimulation(seq, stapled=False, FractTFE=False , FFdir=False, one_letter
 #shutil.copyfile(args.pdbfile,'inputs/peptide.pdb' )
 
  sequence , xtra_libs, indices_stapled_residues = make_3_letters_sequence(seq, stapled , one_letter , three_letters)
+ print(indices_stapled_residues)
 
-
- xtra_libs=''
- indices_stapled_residues=''
+ #xtra_libs=''
+ #indices_stapled_residues=''
  bond=''
- while indices_stapled_residues : bond+= 'bond m.%s.CX  m.%s.CX' %( indices_stapled_residues.pop()+2 ,indices_stapled_residues.pop() +2)
-
+ while indices_stapled_residues : bond+= 'bond m.%s.CY  m.%s.CY' %( indices_stapled_residues.pop()+2 ,indices_stapled_residues.pop() +2)
+ print(bond)
  if FractTFE :
      if verbose: print('A mixture of %s/%s TFE/WATERTIP4EW will be used' %( FractTFE, 100 -FractTFE ))
-     solvent = 'loadoff %sTFE%sBOX.lib \nloadamberparams %sTFE.frcmod \nsolvatebox m  TFE%sBOX 5.0 iso \n' %(FFdir , FractTFE , FFdir, FractTFE)
+     solvent = 'loadoff %sTFE%sBOX.lib \nloadamberparams %sTFE.frcmod \nsolvatebox m  TFE%sBOX 10.0 iso \n' %(FFdir , FractTFE , FFdir, FractTFE)
  else :
-     solvent = 'solvatebox m  TIP4PEWBOX 5 iso \n'
+     solvent = 'solvatebox m  TIP4PEWBOX 8 iso \n'
      if verbose: print('WATERTIP4EW will be used' )
 
  #impose an helical start( up to 20 residues )
@@ -198,7 +206,7 @@ def get_protein_atomtypes(input_parm):
     C and S atomtypes to be used in STREMD scaling.
     """
 
-    solventype= ['OW','HW', 'CS', 'F', 'OF']
+    solventype= ['OW','HW', 'CS', 'F', 'OF', 'HO', 'Cl-','Na+', 'K+']
     # protein atomtypes
     proteic_atomtypes = []
     for resid in input_parm.residues:
@@ -207,6 +215,22 @@ def get_protein_atomtypes(input_parm):
                 if atom.type.isupper() and atom.type not in proteic_atomtypes and atom.type not in solventype:
                     proteic_atomtypes.append(atom.type)
     return proteic_atomtypes
+
+def get_protein_atom(input_parm):
+    """
+    Read all residues and atoms and return a list of sidechain (+ C_alpha)
+    C and S atomtypes to be used in STREMD scaling.
+    """
+
+    solventype= ['OW','HW', 'CS', 'F', 'OF', 'HO', 'Cl-','Na+', 'K+']
+    # protein atomtypes
+    proteic_atom = []
+    for resid in input_parm.residues:
+        for atom in resid.atoms:
+            if atom.atomic_number in [ 1, 6, 7, 8, 16]: # C, N , O and S
+                if atom.type.isupper() and atom.idx not in proteic_atom and atom.type not in solventype:
+                    proteic_atom.append(atom.idx)
+    return proteic_atom
 
 #----------------------------------------------
 def do_HMR(input_parm, HM_Da):
@@ -243,10 +267,10 @@ def scale_solvent_protein_LJPairs(input_parm, atomtypes_changed, sfactor, verbos
     eps_OW = input_parm.LJ_depth[input_parm.LJ_types["OW"]-1]
 
     # add COMMENTS
-    input_parm.parm_comments['USER_COMMENTS'] += ['REST1 METHOD (scaling factor = %.3f)' % sfactor,\
+    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % sfactor,\
                                                   'scaled OW LJ pair interactions with atomtypes',', '.join(atomtypes_changed)]
     # FOR GROMACS
-    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+    gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
 
     # select atomtnames for scaling atomtypes
     for atype in atomtypes_changed:
@@ -275,16 +299,16 @@ def scale_solvent_protein_LJPairs(input_parm, atomtypes_changed, sfactor, verbos
 
 def scale_solvent_LJ(input_parm,  sfactor, verbose=False):
     """
-    Multiplies water and TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST1 scheme.
+    Multiplies water and TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST2 scheme.
     Returns an updated parmed parameter object.
     """
 
 
     # add COMMENTS
-    input_parm.parm_comments['USER_COMMENTS'] += ['REST1 METHOD (scaling factor = %.3f)' % sfactor,\
+    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % sfactor,\
                                                   'scaled OW , CS, F, OF LJ epsilon' ]
     # FOR GROMACS
-    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+    gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
 
     #Define solvent atomype : Water,  Water/TFE , TFE . Maybe have to come with something more elegant ?
     solventype=['OW','HW' , 'EP']
@@ -314,26 +338,28 @@ def scale_solvent_LJ(input_parm,  sfactor, verbose=False):
 
 def scale_protein_LJ(input_parm,  sfactor, verbose=False):
     """
-    Multiplies water and TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST1 scheme.
+    Multiplies water and TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST2 scheme.
     Returns an updated parmed parameter object.
     """
 
 
     # add COMMENTS
-    input_parm.parm_comments['USER_COMMENTS'] += ['REST1 METHOD (scaling factor = %.3f)' % sfactor,\
-                                                  'scaled OW , CS, F, OF LJ epsilon' ]
+    #input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % sfactor, 'scaled OW , CS, F, OF LJ epsilon' ]
     # FOR GROMACS
-    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+    gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
 
     #Define solvent atomype : Water,  Water/TFE , TFE . Maybe have to come with something more elegant ?
 
 
     for atype in get_protein_atomtypes(input_parm):
+        if verbose : print(atype)
         try :
             rh_s = input_parm.LJ_radius[input_parm.LJ_types[atype]-1] # Rmin/2
             eps_s = input_parm.LJ_depth[input_parm.LJ_types[atype]-1]
         except : continue
+        if verbose : print(eps_s)
         eps_s *= sfactor   #apply the factor
+        if verbose : print(eps_s)
         act_changeLJ = parmed.tools.actions.changeLJSingleType(input_parm, "@%" + atype.replace("*", "\\\*"), rh_s, eps_s)
         act_changeLJ.execute()
 
@@ -352,16 +378,16 @@ def scale_protein_LJ(input_parm,  sfactor, verbose=False):
 
 def scale_solvent_charges(input_parm,  sfactor, verbose=False):
     """
-    Multiplies water and TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST1 scheme.
+    Multiplies water and TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST2 scheme.
     Returns an updated parmed parameter object.
     """
 
 
     # add COMMENTS
-    input_parm.parm_comments['USER_COMMENTS'] += ['REST1 METHOD (scaling factor = %.3f)' % math.sqrt(sfactor),\
-                                                  'scaled OW , CS, F, OF partial charges ' ]
+    #input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % math.sqrt(sfactor),\
+                                            #      'scaled OW , CS, F, OF partial charges ' ]
     # FOR GROMACS
-    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+    gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
 
     solventype=[]
     solventype= [ 'EP','HW' ,'OW' ]
@@ -382,10 +408,10 @@ def scale_solvent_charges(input_parm,  sfactor, verbose=False):
     solventcharge *= math.sqrt(sfactor)   #apply the factor
     if verbose: print ( solventcharge)
     for i in solventype :
-        try :
+    #    try :
             act_changecharge=parmed.tools.actions.change(input_parm, input_parm.charge_flag , "@%" + i,solventcharge[solventype.index(i)] )
             act_changecharge.execute()
-        except : continue
+    #        except : continue
 
     solventcharge=np.zeros(len(solventype))
     #while 0 in solventcharge:
@@ -404,42 +430,48 @@ def scale_protein_charges(input_parm,  sfactor, verbose=False):
     Multiplies every not water or TFE (atomtype = "OW", C O ) LJPair depth (epsilon) with solvent  by sfactor according to REST2 scheme.
     Returns an updated parmed parameter object.
     """
-
+    if verbose: print ( 'Scaling protein charges')
 
     # add COMMENTS
-    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % math.sqrt(sfactor),\
-                                                  'scaled OW , CS, F, OF partial charges ' ]
+#    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % math.sqrt(sfactor),\
+                                                #  'scaled OW , CS, F, OF partial charges ' ]
     # FOR GROMACS
-    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+    gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
 
 
-    protype= get_protein_atomtypes(input_parm)
-
-
+    protype= get_protein_atom(input_parm)
+    if verbose: print (protype)
+    #protcharge=np.zeros(len(protype))
     protcharge=np.zeros(len(protype))
     for resid in input_parm.residues:
-            if  0 not  in protcharge  : break
+
+            if  0 not  in protcharge  : break # shorten the charge search : but not if one protein atom got charge of zero
             for atom in resid.atoms:
+                #if verbose: print (protype.index(atom))
+                if atom.type.isupper() and atom.idx in protype:
 
-                if atom.type.isupper() and atom.type in protype:
+                    protcharge [protype.index(atom.idx)] =atom.charge
 
-                    protcharge [protype.index(atom.type)] =atom.charge
-    if verbose: print (protcharge)
+
+    if verbose: print (protcharge ,sfactor )
+
     protcharge *= math.sqrt(sfactor)   #apply the factor
     if verbose: print ( protcharge)
+
     for i in protype :
-        try :
-            act_changecharge=parmed.tools.actions.change(input_parm, input_parm.charge_flag , "@%" + i,protcharge[protype.index(i)] )
+
+        #try :
+            act_changecharge=parmed.tools.actions.change(input_parm, input_parm.charge_flag , "@" + str(i+1),protcharge[protype.index(i)] )
             act_changecharge.execute()
-        except : continue
+        #except : continue
 
     protcharge=np.zeros(len(protype))
     #while 0 in protcharge:
     for resid in input_parm.residues:
             for atom in resid.atoms:
-                if atom.type.isupper() and atom.type  in protype:
-                    protcharge [protype.index(atom.type)] =atom.charge
-
+                if atom.type.isupper() and atom.idx  in protype:
+                    protcharge [protype.index(atom.idx)] =atom.charge
+    if verbose: print(protcharge)
     return input_parm
 
 #-------------------------------------------------------------------------------------------
@@ -452,8 +484,8 @@ def scale_protein_dihedral(input_parm,  sfactor, verbose=False):
 
     protype= get_protein_atomtypes(input_parm)
     # add COMMENTS
-    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % math.sqrt(sfactor),\
-                                                  'scaled OW , CS, F, OFdihedrals ' ]
+#    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % math.sqrt(sfactor),\
+                                    #              'scaled OW , CS, F, OFdihedrals ' ]
     # FOR GROMACS
     gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
 
@@ -465,22 +497,54 @@ def scale_protein_dihedral(input_parm,  sfactor, verbose=False):
     return input_parm
 
 #-------------------------------------------------------------------------------------------
+def neutralize_protein_charges(input_parm,  verbose=True):
+    '''
+    Neutralize topology charge par repartitioning the protein charge over the couterions
+    '''
+    #poscounterions=['Na+','K+']
+    #negcounterions=['Cl-']
+    ## list auto-updated :avoid warning if mask is empty allow all kingd of couterions if they got + or - at the end of theyre atomtype name
+    poscounterions=[]
+    negcounterions=[]
+    count=0
+    charge=parmed.tools.actions.netCharge(input_parm).execute()
+    if charge < 0 :
+            for resid in input_parm.residues:
+                for atom in resid.atoms:
+                    if atom.type[-1] == '-':
+                        count+=1
+                        if atom.type not in negcounterions : negcounterions.append(atom.type)
+                    if verbose : print('%s neg counterions found' %(count))
+            for i in negcounterions:
+                act_changecharge=parmed.tools.actions.change(input_parm, input_parm.charge_flag , "@%" +i ,(1-1/count*charge) )
+                act_changecharge.execute()
+    else:
+        for resid in input_parm.residues:
+                for atom in resid.atoms:
+                    if atom.type[-1] == '+':
+                        count+=1
+                        if atom.type not in poscounterions : poscounterions.append(atom.type)
+        for i in poscounterions:
+            act_changecharge=parmed.tools.actions.change(input_parm, input_parm.charge_flag , "@%" +i ,(1-1/count*charge) )
+            act_changecharge.execute()
+            if verbose :print('%s nposcounterions found' %(count)        )
 
 
+    return input_parm
 
 def scale_solvent_solvent_LJPairs(input_parm, atomtypes_changed, sfactor, verbose=False):
     """
-    Multiplies water and TFE (atomtype = "OW", CS O ) LJPair depth (epsilon) with solvent  by sfactor according to REST1 scheme.
+    Multiplies water and TFE (atomtype = "OW", CS O ) LJPair depth (epsilon) with solvent  by sfactor according to REST2 scheme.
     Returns an updated parmed parameter object.   DEAD
     """
 
 
     # add COMMENTS
-    input_parm.parm_comments['USER_COMMENTS'] += ['REST1 METHOD (scaling factor = %.3f)' % sfactor,\
+    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % sfactor,\
                                                   'scaled solvent  LJ pair interactions with atomtypes',\
 						  ', '.join(atomtypes_changed)]
     # FOR GROMACS
-    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+    gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
 
     # select atomtnames for scaling solvent = water and TFE
     for atype in [OW, C, F, O]:
@@ -512,17 +576,17 @@ def scale_solvent_solvent_LJPairs(input_parm, atomtypes_changed, sfactor, verbos
 
 
 #----------------------------------------------
-def scale_protein_protein_LJPairs(input_parm, atomtypes_changed, sfactor, verbose=False):  #REST1
+def scale_protein_protein_LJPairs(input_parm, atomtypes_changed, sfactor, verbose=False):  #REST2
     """
   DEAD
     """
 
     # add COMMENTS
-    input_parm.parm_comments['USER_COMMENTS'] += ['REST1 METHOD (scaling factor = %.3f)' % sfactor,\
+    input_parm.parm_comments['USER_COMMENTS'] += ['REST2 METHOD (scaling factor = %.3f)' % sfactor,\
                                                   'scaled P-P LJ pair interactions with atomtypes',\
 						  ', '.join(atomtypes_changed)]
     # FOR GROMACS
-    gromacs_nonbond = "; REST1 scaling - %.2f\n" % sfactor
+    gromacs_nonbond = "; REST2 scaling - %.2f\n" % sfactor
 
     # select atomtnames for scaling atomtypes
     for k in range(len(atomtypes_changed)):
@@ -617,16 +681,16 @@ if __name__ == "__main__":
     start_time = time.clock()
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=d, epilog=" ")
     parser.add_argument("-f", type=str, default='system.wat.leap.prmtop', help='input AMBER topology file name (default: %(default)s)')
-    parser.add_argument("-o", type=str, default=None, help='output AMBER topology file name (default: system[HMR]_REST1.XXX.prmtop)')
-    parser.add_argument("-nreps", type=int, default=8, help='number of replicas (default: %(default)s)')
-    parser.add_argument("-smax", type=float, default=1.8, help="maximum scaling factor (default: %(default)s)")
-    parser.add_argument("-smin", type=float, default=1.0, help="minimum scaling factor (default: %(default)s)")
+    parser.add_argument("-o", type=str, default=None, help='output AMBER topology file name (default: system[HMR]_REST2.XXX.prmtop)')
+    parser.add_argument("-nreps", type=int, default=4, help='number of replicas (default: %(default)s)')
+    parser.add_argument("-smax", type=float, default=1.0, help="maximum scaling factor (default: %(default)s)")
+    parser.add_argument("-smin", type=float, default=0.6, help="minimum scaling factor (default: %(default)s)")
     parser.add_argument("-scale", type=float, nargs='+', default=[], help="list of scaling factor(s); overrides -nreps, -smax, -smin (default: %(default)s)")
     parser.add_argument("-sf", type=str,  default='lin', help="function for scaling : lin/exp (linear/exponetial) (default: %(default)s)")
     parser.add_argument("-ignore", default=False, action='store_true', help="ignore warnings (default: %(default)s)")
     parser.add_argument("-hmr", default=False, action='store_true', help="HMassRepartition (default: %(default)s)")
     parser.add_argument("-hm_Da", type=float, default=None, help="H mass in Daltons used in HMR (default: use parmed default, 3.024)")
-    parser.add_argument("-v", "--verbose", action='store_true', help="be verbose")
+    parser.add_argument("-v", "--verbose", action='store_true',default=False,  help="be verbose")
     parser.add_argument("-xyz", type=str, default='system.wat.leap.rst7', help='input AMBER coordinate file name (default: %(default)s)')
     parser.add_argument("-gmx", default=False, action='store_true', help="save GROMACS topology, too (not functional !!!) (default: %(default)s)")
     parser.add_argument('-seq'  ,  type=str , help='input sequence')
@@ -636,7 +700,7 @@ if __name__ == "__main__":
     parser.add_argument('-helical' , action='store_true' , help='whether the peptide start in an helical conformation ' )
     parser.add_argument('-stapled' , action='store_true',  help='whether the peptide is stapled' )
     parser.add_argument('-FracTFE'  ,  default=False,  type=int, help='input sequence')
-    parser.add_argument('-FFdir' ,default=os.path.dirname(os.path.realpath(sys.argv[0]))+'ForceFieldFiles/' , action='store_true',  help='Additional forcefield files for custom residus and solvent  %(default)s' )
+    parser.add_argument('-FFdir' ,default=os.path.dirname(os.path.realpath(sys.argv[0]))+'/ForceFieldFiles/' , action='store_true',  help='Additional forcefield files for custom residus and solvent  %(default)s' )
     ########################################################
     # PARSING INPUTS
     ########################################################
@@ -657,13 +721,14 @@ if __name__ == "__main__":
     gmx = args.gmx
     sequence=args.seq
     FractTFE=args.FracTFE
-    FFdir=args.FFdir
+    #FFdir=args.FFdir
+    FFdir='/home/marie/Desktop/newparam/libs/'
     stapled=args.stapled
     helical=args.helical
     scale_func=args.sf
 
     if sequence :
-        setupsimulation(sequence,FractTFE=FractTFE,  FFdir=FFdir)
+        setupsimulation(sequence,stapled=stapled, FractTFE=FractTFE,  FFdir=FFdir)
 
     else :
         if FractTFE or stapled or helical : exit('Errror : input  FractTFE or stapled or helical only valid if paramater files are generated from the file  please provide a sequence')
@@ -690,14 +755,17 @@ if __name__ == "__main__":
         else :
             sys.exit('smax and smin sould be between 1 and 2')
     elif scale == [] and scale_func =='lin'  :
-        smax= 1/smax
+        #smax= 1/smax
+        #smin= 1/smin
         sfactors = np.linspace(smin, smax, nreps)
     else:
         sfactors = scale
+        if verbose : print(sfactors)
         nreps = len(scale)
-    print(sfactors)
+
+
     if 1.0 not in sfactors:
-        print("WARNING: scaling factors does not include 1.0 - are you sure, it's OK?")
+        print("WARNING: scaling factors does not include 1.0 ")
         if not ignore:
             print("If above list looks OK, and you know what you are doing: restart with a flag '-ignore' to proceed.")
             exit(2)
@@ -712,7 +780,7 @@ if __name__ == "__main__":
 
     dirpath="./"
 
-    logfile = "REST1_%s.log" % time.strftime("%Y-%m-%d", time.gmtime())
+    logfile = "REST2_%s.log" % time.strftime("%Y-%m-%d", time.gmtime())
     print("Writing all the modifications to the log file: %s\n" % logfile)
     log = open(logfile, 'w')
     log.write("# This log was created on %s \n# by executing this command line:\n# %s\n###\n" %\
@@ -740,32 +808,36 @@ if __name__ == "__main__":
         log.write(print_replica)
         if verbose: print(print_replica)
 
-        # apply REST1-type scaling!
+        # apply REST2-type scaling!
         input_parm_copy = copy.copy(input_parm)
-        #new_parm, REST1_gmx_nonbond = scale_solvent_protein_LJPairs(input_parm_copy, atomtypes_REST1, np.sqrt(sfactor), verbose=True)
-        #new_parm, REST1_gmx_nonbond = scale_protein_protein_LJPairs(input_parm_copy, atomtypes_REST1, sfactor, verbose=True)
+        #new_parm, REST2_gmx_nonbond = scale_solvent_protein_LJPairs(input_parm_copy, atomtypes_REST2, np.sqrt(sfactor), verbose=True)
+        #new_parm, REST2_gmx_nonbond = scale_protein_protein_LJPairs(input_parm_copy, atomtypes_REST2, sfactor, verbose=True)
         if verbose: print('scaling LJ interactions')
         #scale_solvent_LJ
         new_parm_LJ = scale_protein_LJ(input_parm_copy, sfactor, verbose=True)
         if verbose: print('scaling charges interactions')
         #scale_solvent_charges
-        new_parm = scale_protein_charges(new_parm_LJ, sfactor, verbose=True)
+        new_parm_charge = scale_protein_charges(new_parm_LJ, sfactor, verbose=True)
+        if parmed.tools.actions.netCharge(new_parm_charge).execute() !=0 :
+
+            new_parm_charge_reweigthed =neutralize_protein_charges(new_parm_charge,  verbose=True)
+        else : new_parm_charge_reweigthed = new_parm_charge
         # check if off-diagonal terms have been changed
-        if verbose: print("Off-diagonal terms changed: %s\n" % str(new_parm.has_NBFIX()))
-        new_parm = scale_protein_dihedral(new_parm_LJ, sfactor, verbose=True)
+        if verbose: print("Off-diagonal terms changed: %s\n" % str(new_parm_charge.has_NBFIX()))
+        new_parm = scale_protein_dihedral(new_parm_charge_reweigthed, sfactor, verbose=True)
         # SAVE AMBER .PRMTOP
         new_parm.save(dirpath+'%s+REST2.%03d.prmtop' % (outputname, rep), format="amber", overwrite=True)
-        print_saved = '### New topology saved as %s+REST1.%03d.prmtop\n' % (outputname, rep)
+        print_saved = '### New topology saved as %s+REST2.%03d.prmtop\n' % (outputname, rep)
         log.write(print_saved)
         if verbose: print(print_saved)
 
         # SAVE GMX .TOP
         if gmx:
             # GROMACS - modify nonbond
-            gmx_nonbond = lig_gmx_nonbond + REST1_gmx_nonbond
+            gmx_nonbond = lig_gmx_nonbond + REST2_gmx_nonbond
             # save
-            add_nonbond_params(gmx_output+".top", gmx_nonbond, dirpath+outputname+"+REST1%i.top" % rep)
-            print_saved_gmx = '### New GMX topology saved as '+ dirpath+outputname+'+REST1%i.top\n' % rep
+            add_nonbond_params(gmx_output+".top", gmx_nonbond, dirpath+outputname+"+REST2%i.top" % rep)
+            print_saved_gmx = '### New GMX topology saved as '+ dirpath+outputname+'+REST2%i.top\n' % rep
             log.write(print_saved_gmx)
             if verbose: print(print_saved_gmx)
 

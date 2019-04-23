@@ -14,6 +14,7 @@ from Sire.Base import *
 from Sire.Qt import *
 from Sire.ID import *
 from Sire.Config import *
+import numpy
 
 combining_rules = "arithmetic"
 
@@ -116,8 +117,10 @@ def setupForcefields(system, space):
     return system
 
 
-rst_file = sys.argv[2]
+
 top_file = sys.argv[1]
+
+rst_file = sys.argv[2]
 
 amber = Amber()
 print(rst_file ,top_file )
@@ -130,5 +133,7 @@ print (system.energy())
 
 energysymbols = system.energySymbols()
 
+energysymbols =numpy.array(energysymbols)
+energysymbols = numpy.sort(energysymbols)
 for symbol in energysymbols:
-    print (symbol,system.energy(symbol))
+    print ( symbol,system.energy(symbol))
