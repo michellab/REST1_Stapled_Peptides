@@ -1,0 +1,59 @@
+#! /bin/bash
+
+#SBATCH --job-name=checksoluteT
+#SBATCH -p  GTX
+#SBATCH -c  4
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --gres=gpu:4
+#SBATCH --time 48:00:00
+
+module load fftw/3.3.4
+module load amber/16
+module load cuda/7.5
+
+source  /home/common/AMBER16/amber16/amber.sh 
+export LD_LIBRARY_PATH=/users/common/miniconda2/lib/:$LD_LIBRARY_PATH
+
+if [ "$1" != "" ]; then
+    inputfile=$1
+    echo 'running file' $1 
+else
+    echo "Positional parameter 1 is empty"
+fi
+
+rm equilibration.group
+rm equilibration2.group
+rm prod.group
+
+
+temp='290' 
+n=4
+rep=$((n-1))
+
+
+cp ~/submitambersim/equilibrateT.in equilibrate.in
+cp ~/submitambersim/equilibrate2T.in  equilibrate2.in  
+cp ~/submitambersim/prodT.in prod.in 
+echo $temp
+sed -i -e s/\$TEMP/$temp/  *.in 
+sed -i -e s/\$TEMP/$temp/  *.in
+
+
+
+
+for  i in $(seq 0 $rep) ;  do
+echo i 
+echo -O -rem 0 -i equilibrate.in -p $inputfile\+REST2.00$i\.prmtop  -c  min.rst7  -r eq_$i\.rst7 >> equilibration.group
+echo -O -rem 0 -i equilibrate2.in -p $inputfile\+REST2.00$i\.prmtop  -o equi2_$i\.out -c  eq_$i\.rst7  -r eq2_$i\.rst7 >> equilibration2.group
+echo -O -rem 3 -i prod.in -p $inputfile\+REST2.00$i\.prmtop -o prod_$i\.out -c   eq2_$i\.rebuild.rst7  -r restart_$i\.rst7 -x traj_$i\.nc >> prod.group
+
+done
+
+sander -O -i ~/submitambersim/min.in -p   $inputfile\+REST2.000.prmtop  -c $inputfile\.rst7 -r min.rst7 ;
+mpirun -np $n  pmemd.cuda.MPI -ng $n -groupfile  equilibration.group
+mpirun -np $n  pmemd.cuda.MPI  -ng $n -groupfile  equilibration2.group  
+for  i in $(seq 0 $rep) ;  do
+cpptraj  $inputfile\+REST2.00$i\.prmtop  ~/submitambersim/cpptraj_$i\.in
+done
+mpirun -np $n  pmemd.cuda.MPI  -ng $n -groupfile  prod.group

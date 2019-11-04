@@ -1,0 +1,13 @@
+trajin eq3_11.rst7
+autoimage
+trajout eq3_11.rebuild.rst7
+run
+clear
+
+
+
+
+
+
+
+

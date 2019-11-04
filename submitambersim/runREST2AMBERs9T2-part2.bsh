@@ -1,0 +1,42 @@
+#! /bin/bash
+
+#SBATCH --job-name=soluteTprod
+#SBATCH -p GTX
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=4
+#SBATCH --gres=gpu:4
+#SBATCH --time 48:00:00
+#SBATCH -c 4
+#SBATCH --nodelist=node[010,011]
+
+
+
+module load fftw/3.3.4
+module load amber/16
+module load cuda/7.5
+
+
+source  /home/common/AMBER16/amber16/amber.sh 
+export LD_LIBRARY_PATH=/users/common/miniconda2/lib/:$LD_LIBRARY_PATH
+
+###############
+# RUN VARIABLES-  
+###############
+n=$2
+#n=8
+rep=$((n-1))
+#rep=$3
+#temp='290'
+###############
+inputfile=$1
+cp ~/submitambersim/prod-mini.in  prod.in
+
+
+### NVT final equilibration -- diff  hamiltonian diff conformations
+mpirun -np $n  pmemd.cuda.MPI -ng $n -groupfile  equilibration.group
+### Starting with nice boxes 
+for  i in $(seq 0 $rep) ;  do
+cpptraj  $inputfile\.prmtop cpptraj_$i\.in
+done
+### NVT Production run
+mpirun -np $n  pmemd.cuda.MPI  -ng $n -groupfile  prod.group

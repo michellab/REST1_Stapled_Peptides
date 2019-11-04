@@ -1,0 +1,20 @@
+#! /bin/bash
+
+#SBATCH --job-name=TNF
+#SBATCH -p Tesla 
+#SBATCH -c 2 
+#SBATCH --gres=gpu:1
+#SBATCH --time 48:00:00
+
+module load fftw/3.3.4
+module load amber/16
+module load cuda/7.5
+
+source  /home/common/AMBER16/amber16/amber.sh 
+export LD_LIBRARY_PATH=/users/common/miniconda2/lib/:$LD_LIBRARY_PATH
+
+#sander -O -i ~/submitambersim/min.in -p   topol.prmtop  -c input.rst7 -r min.rst7  -o min.out;
+#sander -O -i ~/submitambersim/min-long.in -p   topol.prmtop  -c min.rst7 -r min2.rst7 
+#pmemd.cuda -O -i  ~/submitambersim/equilibrate.in -p topol.prmtop  -c  min.rst7  -r eq.rst7   -o heat.out
+sander  -O -i  ~/submitambersim/equilibrate2.in -p topol.prmtop  -c eq.rst7 -r eq2.rst7  -o equi.out
+pmemd.cuda  -O -i ~/submitambersim/prod.in -p topol.prmtop  -c eq2.rst7 -r restart.rst7 -x traj.nc -o md.out

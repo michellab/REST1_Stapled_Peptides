@@ -1,0 +1,51 @@
+#! /bin/bash
+
+#SBATCH --job-name=checksoluteT
+#SBATCH -p Tesla 
+#SBATCH -c 8 
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=4
+#SBATCH --gres=gpu:4
+#SBATCH --time 48:00:00
+
+module load fftw/3.3.4
+module load amber/16
+module load cuda/7.5
+
+source  /home/common/AMBER16/amber16/amber.sh 
+export LD_LIBRARY_PATH=/users/common/miniconda2/lib/:$LD_LIBRARY_PATH
+
+if [ "$1" != "" ]; then
+    inputfile=$1
+    echo 'running file' $1 
+else
+    echo "Positional parameter 1 is empty"
+fi
+
+rm equilibration.group
+rm equilibrationi2.group
+rm prod.group
+
+if [ "$2" != "" ]; then
+let i=000
+for temp in $@
+do if [ $temp != $1 ] ; then 
+let i="%03d " { $i+1 }
+cp ~/submitambersim/equilibrateT.in equilibrate_$i\.in
+cp ~/submitambersim/equilibrate2T.in  equilibrate2_$i\.in  
+cp ~/submitambersim/prodT.in prod_$i\.in 
+echo $temp
+sed -i -e s/\$TEMP/$temp/  *$i\.in 
+sed -i -e s/\$TEMP/$temp/  *$i\.in
+echo -O -rem 0 -i equilibrate_$i\.in -p $inputfile\+REMD.$i\.prmtop  -c  min.rst7  -r eq_$i\.rst7 >> equilibration.group
+echo -O -rem 0 -i equilibrate2_$i\.in -p $inputfile\+REMD.$i\.prmtop  -c  eq_$i\.rst7  -r eq2_$i\.rst7 >> equilibrationi2.group
+echo -O -rem 3 -i prod_$i\.in -p $inputfile\+REMD.$i\.prmtop  -c   eq2_$i\.rst7  -r restart_$i\.rst7 -x traj_$i\.nc >> prod.group
+ fi
+done
+else echo 'error no temperatures provided'
+fi
+
+sander -O -i ~/submitambersim/min.in -p   $inputfile\.prmtop  -c $inputfile\.rst7 -r min.rst7 ;
+mpirun -np $i  pmemd.cuda.MPI -ng $i -groupfile  equilibration.group
+mpirun -np $i  pmemd.cuda.MPI  -ng $i -groupfile  equilibrationi2.group   
+mpirun -np $i  pmemd.cuda.MPI  -ng $i -groupfile  prod.group

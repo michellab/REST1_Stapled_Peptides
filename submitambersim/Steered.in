@@ -1,0 +1,6 @@
+variable
+type = TORSION
+i= (@52, @53, @54, @55)
+path= (0.00 )
+harm=(10.0,  100.0, 0)
+end variable

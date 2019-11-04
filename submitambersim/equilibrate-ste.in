@@ -1,0 +1,29 @@
+Heating up the system equilibration stage 1
+ &cntrl
+  nstlim=5000, dt=0.002, ntx=1, irest=0, ntpr=500, ntwr=5000, ntwx=5000,
+
+  tempi =100.0, temp0=300.0, ntt=1, tautp=2.0, 
+ 
+  ntb=1, ntp=0,
+
+  ntc=2, ntf=2,
+
+  nrespa=1,iwrap=1
+/
+
+ncsu_smd
+
+output_file = 'smd.txt'
+output_freq=50
+
+
+variable
+type = TORSION
+i= (:4@CD, :4@CY, :8@CY, :8@CD)
+path=  (X, 0.00) path_mode = LINES
+harm=(1000.0)
+end variable
+
+end ncsu_smd
+
+

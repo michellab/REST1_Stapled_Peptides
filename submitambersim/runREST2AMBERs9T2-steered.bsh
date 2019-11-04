@@ -1,0 +1,89 @@
+#! /bin/bash
+
+#SBATCH --job-name=soluteT-part1
+#SBATCH -p  Tesla
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH --time 48:00:00
+
+
+module load fftw/3.3.4
+module load amber/16
+module load cuda/7.5
+
+
+source  /home/common/AMBER16/amber16/amber.sh 
+export LD_LIBRARY_PATH=/users/common/miniconda2/lib/:$LD_LIBRARY_PATH
+
+###############
+# RUN VARIABLES-  
+###############
+n=8
+rep=$((n-1))
+temp='290'
+###############
+
+
+if [ "$1" != "" ]; then
+    inputfile=$1
+    echo 'running file' $1 
+else
+    echo "Positional parameter 1 is empty"
+    inputfile='system.wat.leap'
+fi
+
+
+
+##Cleanup old group files
+rm *.group
+### Copy input files in folder
+cp ~/submitambersim/steered.in steered.in
+cp ~/submitambersim/prodT.in prod.in 
+#get simulation at 300 K
+
+sed -i -e s/\$TEMP/$temp/g  *.in 
+###
+
+
+
+###Prepare inputs
+for  i in $(seq 0 $rep) ;  do
+
+
+## Cpptraj inputs : 
+# Samples selection
+echo trajin heated.nc  $'\n'autoimage $'\n'trajout sampled_$i\.rst7   onlyframes $((260/$n*$i+1)) $'\n'run $'\n'clear  > cpptraj_samp_$i\.in
+# Making nice boxes for production stage
+echo trajin eq3_$i\.rst7 $'\n'autoimage  $'\n'trajout eq3_$i\.rebuild.rst7  $'\n'run  $'\n'clear  > cpptraj_$i\.in
+
+
+##Groupfiles
+# NVT equilibration group file # second line for no sampling
+echo -O -rem 0 -i equilibrate3.in -p $inputfile\+REST2.00$i\.prmtop  -c sampled_$i\.rst7  -r eq3_$i\.rst7 >> equilibration.group
+#echo -O -rem 0 -i equilibrate3.in -p $inputfile\+REST2.00$i\.prmtop  -c eq2.rst7  -r eq3_$i\.rst7 >> equilibration.group
+
+# Production Stage groupefile
+echo -O -rem  3  -i prod.in -p $inputfile\+REST2.00$i\.prmtop -o prod_$i\.out -c   eq3_$i\.rebuild.rst7  -r restart_$i\.rst7 -x traj_$i\.nc >> prod.group
+
+done
+###
+
+
+
+pmemd.cuda   -O -i steered.in   -o steered.out  -p $inputfile\.prmtop  -c eq2.rst7  -r steered.rst7 -x steered.nc ;
+### Selecting framed from melting peptide
+for  i in $(seq 0 $rep) ;  do
+cpptraj  $inputfile\+REST2.000.prmtop  cpptraj_samp_$i\.in
+done
+### NVT final equilibration -- diff  hamiltonian diff conformations
+mpirun -np $n  pmemd.cuda.MPI -ng $n -groupfile  equilibration.group
+### Starting with nice boxes 
+for  i in $(seq 0 $rep) ;  do
+cpptraj  $inputfile\+REST2.000.prmtop cpptraj_$i\.in
+done
+### NVT Production run
+mpirun -np $n  pmemd.cuda.MPI  -ng $n -groupfile  prod.group
+
+
+sbatch    ~/submitambersim/runREST2AMBERs9T2-part2.bsh  $inputfile $n 
